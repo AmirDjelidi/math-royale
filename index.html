@@ -1,0 +1,840 @@
+<meta charset="utf-8">
+<title>Math Royale — Duel de Fonctions</title>
+<style>
+  :root{
+    --bg0:#070b14; --bg1:#0c1322; --panel:#0f1626; --panel2:#121b30;
+    --line:#1e2a45; --ink:#dbe6fa; --dim:#7e8db0; --faint:#4a5878;
+    --p1:#4de3c0; --p2:#ffb454; --gold:#ffd166; --hurt:#ff6b6b;
+    --mono:"Cascadia Code", ui-monospace, Consolas, "JetBrains Mono", monospace;
+    --ui:system-ui, "Segoe UI", sans-serif;
+  }
+  html,body{height:100%;}
+  body{
+    margin:0; background:linear-gradient(180deg,var(--bg0),var(--bg1));
+    color:var(--ink); font-family:var(--ui); overflow:hidden;
+  }
+  /* min-height explicite : dans l'iframe auto-dimensionnée des artifacts,
+     100dvh seul est circulaire (contenu = taille iframe = contenu) et tout s'écrase. */
+  #app{height:100dvh; min-height:660px; display:flex; flex-direction:column; gap:8px; padding:10px; box-sizing:border-box;}
+
+  /* ---- top bar : équipes + titre ---- */
+  #topbar{display:flex; align-items:stretch; gap:8px;}
+  .duelist{
+    flex:1; display:flex; flex-direction:column; gap:6px; justify-content:center;
+    background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:9px 13px;
+    transition:box-shadow .3s, border-color .3s;
+  }
+  .duelist.right{align-items:flex-end;}
+  .dname{font-family:var(--mono); font-weight:700; font-size:15px; letter-spacing:.14em; color:var(--who);}
+  .dtag{font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--faint);}
+  .hprow{display:flex; align-items:center; gap:9px; width:100%;}
+  .duelist.right .hprow{flex-direction:row-reverse;}
+  .hptrack{flex:1; max-width:220px; height:8px; background:#161f36; border-radius:99px; overflow:hidden; border:1px solid #1b2740;}
+  .hpfill{height:100%; width:100%; border-radius:99px; background:linear-gradient(90deg,var(--who),color-mix(in srgb,var(--who) 55%, white)); transform-origin:left center; transition:transform .35s ease;}
+  .hpnum{font-family:var(--mono); font-size:15px; font-weight:700; color:var(--who); font-variant-numeric:tabular-nums; min-width:2.2ch;}
+  .duelist.hurt .hpnum{animation:hurtFlash .4s;}
+  @keyframes hurtFlash{0%,60%{color:var(--hurt);} 100%{color:var(--who);}}
+
+  #center{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; padding:6px 16px; background:var(--panel); border:1px solid var(--line); border-radius:9px;}
+  #title{font-size:13px; font-weight:700; letter-spacing:.34em; text-transform:uppercase; color:var(--ink); white-space:nowrap;}
+  #title .x{color:var(--gold);}
+  #sub{font-size:10px; letter-spacing:.1em; color:var(--faint); white-space:nowrap;}
+  #series{font-family:var(--mono); font-size:11px; color:var(--dim); white-space:nowrap; font-variant-numeric:tabular-nums;}
+
+  /* ---- arène ---- */
+  #stage{flex:1; min-height:0; position:relative; border:1px solid var(--line); border-radius:10px; overflow:hidden; background:#080d18;}
+  #cv{position:absolute; inset:0; width:100%; height:100%; display:block;}
+  #banner{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    pointer-events:none; font-family:var(--mono); font-weight:800;
+    font-size:clamp(24px,5.4vw,48px); letter-spacing:.18em; text-align:center;
+    opacity:0; text-shadow:0 0 26px currentColor, 0 2px 0 rgba(0,0,0,.5); z-index:3;
+  }
+  #banner.show{animation:bannerPop 1.5s ease forwards;}
+  @keyframes bannerPop{
+    0%{opacity:0; transform:scale(.72);}
+    12%{opacity:1; transform:scale(1.05);}
+    20%{transform:scale(1);}
+    78%{opacity:1;}
+    100%{opacity:0; transform:scale(1.02);}
+  }
+  #feed{
+    position:absolute; top:8px; right:10px; z-index:2; pointer-events:none;
+    display:flex; flex-direction:column; gap:3px; align-items:flex-end;
+    font-family:var(--mono); font-size:11px;
+  }
+  .feedline{
+    background:rgba(10,15,28,.72); border:1px solid var(--line); border-radius:6px;
+    padding:3px 8px; color:var(--dim); animation:feedIn .25s ease;
+  }
+  .feedline b{font-weight:700;}
+  @keyframes feedIn{from{opacity:0; transform:translateX(8px);} to{opacity:1;}}
+  #overlay{
+    position:absolute; inset:0; z-index:4; display:flex; align-items:center; justify-content:center;
+    background:rgba(6,10,20,.78); backdrop-filter:blur(3px); padding:16px; box-sizing:border-box;
+  }
+  #overlay.hidden{display:none;}
+  #overlay .panel{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:20px 26px; max-width:520px; width:100%; max-height:100%; overflow:auto;
+    box-shadow:0 10px 50px -10px rgba(0,0,0,.7);
+  }
+  #overlay h2{margin:0 0 4px; font-family:var(--mono); font-size:17px; letter-spacing:.2em; text-transform:uppercase;}
+  #overlay .sub{font-size:11px; color:var(--faint); letter-spacing:.12em; text-transform:uppercase; margin-bottom:14px;}
+  #overlay ul{list-style:none; margin:0 0 12px; padding:0; display:flex; flex-direction:column; gap:6px;}
+  #overlay li{
+    font-family:var(--mono); font-size:12.5px; color:var(--ink);
+    background:var(--panel2); border:1px solid var(--line); border-radius:7px; padding:7px 11px;
+  }
+  #overlay li .lvl{color:var(--gold);}
+  #overlay li .up{color:var(--p1); font-weight:700;}
+  #overlay .note{font-size:11.5px; color:var(--dim); line-height:1.45;}
+
+  /* ---- bandeau de lecture ---- */
+  #readout{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  #formula{
+    flex:2 1 340px; min-width:0; display:flex; align-items:baseline; gap:10px;
+    background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:10px 14px;
+  }
+  #fwho{font-family:var(--mono); font-size:12px; letter-spacing:.12em; white-space:nowrap; color:var(--dim);}
+  #ftextwrap{min-width:0; overflow-x:auto; scrollbar-width:none;}
+  #ftext{font-family:var(--mono); font-style:italic; font-size:16px; white-space:nowrap; color:var(--ink);}
+  #comment{
+    flex:1.4 1 260px; font-size:12.5px; color:var(--dim); line-height:1.35;
+    background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:10px 14px;
+    animation:fadeIn .3s;
+  }
+  @keyframes fadeIn{from{opacity:.2;} to{opacity:1;}}
+  #controls{display:flex; gap:6px;}
+  button{
+    font-family:var(--ui); font-size:11.5px; letter-spacing:.05em; color:var(--ink);
+    background:var(--panel2); border:1px solid var(--line); border-radius:8px;
+    padding:9px 12px; cursor:pointer; white-space:nowrap;
+  }
+  button:hover{border-color:#31446e; background:#16223c;}
+  button:focus-visible{outline:2px solid var(--gold); outline-offset:2px;}
+
+  @media (max-width:680px){
+    #center{display:none;}
+    .dname{font-size:13px;}
+    #ftext{font-size:14px;}
+    button{padding:8px 9px;}
+    #feed{font-size:10px;}
+  }
+</style>
+
+<div id="app">
+  <div id="topbar">
+    <div class="duelist" id="card1" style="--who:var(--p1)">
+      <div><span class="dname">NEWTON</span> <span class="dtag">· 50 boules</span></div>
+      <div class="hprow"><div class="hptrack"><div class="hpfill" id="hp1"></div></div><div class="hpnum" id="hpn1">50</div></div>
+    </div>
+    <div id="center">
+      <div id="title">Math <span class="x">Royale</span></div>
+      <div id="sub">battle royale 50 vs 50 — chaque tir est une courbe f(x)</div>
+      <div id="series">⏱ 3:00 · manche 0 · victoires 0–0</div>
+    </div>
+    <div class="duelist right" id="card2" style="--who:var(--p2)">
+      <div><span class="dtag">50 boules ·</span> <span class="dname">LEIBNIZ</span></div>
+      <div class="hprow"><div class="hptrack"><div class="hpfill" id="hp2"></div></div><div class="hpnum" id="hpn2">50</div></div>
+    </div>
+  </div>
+
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="feed"></div>
+    <div id="banner"></div>
+    <div id="overlay" class="hidden"><div class="panel" id="ovpanel"></div></div>
+  </div>
+
+  <div id="readout">
+    <div id="formula"><span id="fwho">—</span><div id="ftextwrap"><span id="ftext">matchmaking…</span></div></div>
+    <div id="comment">Préparation du champ de bataille…</div>
+    <div id="controls">
+      <button id="bPause" title="Espace">⏸ Pause</button>
+      <button id="bSpeed">Vitesse ×1</button>
+      <button id="bSound">🔇 Son</button>
+      <button id="bNew">⟳ Nouveau match</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+   MATH ROYALE — battle royale de fonctions, 50 vs 50, temps réel.
+   - Chaque boule recharge puis tire sa propre fonction f(x) ;
+     des dizaines de courbes volent simultanément.
+   - Les boules DÉRIVENT lentement : l'IA vise un instantané déjà
+     périmé, les collisions sont résolues en vol contre le monde
+     vivant → rater est normal, même pour une bonne IA.
+   - Joueurs persistants (localStorage) : XP par match/frag/victoire,
+     niveaux 1..8 qui débloquent des familles de fonctions.
+     Chaque match embarque ≥ 2 joueurs, complétés par des bots
+     calés sur le niveau moyen des joueurs présents.
+   ============================================================ */
+
+const TAU = Math.PI*2;
+const WX = 30, WY = 16;            // demi-dimensions du monde
+const HIT_R = 0.7;                 // rayon de collision d'une boule
+const KILL_R = 2.0;                // rayon létal du souffle
+const TEAM_SIZE = 50;
+const STEP = 0.08;                 // pas géométrique des tracés
+const SHOT_SPEED = 30;             // unités monde / seconde
+const MATCH_TIME = 180;            // secondes
+const SUDDEN_AT = 70;              // secondes restantes → mort subite
+const MAX_SHOTS = 40;              // tirs simultanés maxi
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const rndi=n=>Math.floor(Math.random()*n);
+const clamp=(v,lo,hi)=>v<lo?lo:v>hi?hi:v;
+const pick=a=>a[rndi(a.length)];
+const el=id=>document.getElementById(id);
+
+/* ---------- format des formules ---------- */
+function nf(v){
+  const a=Math.abs(v);
+  let s = a>=10 ? a.toFixed(1) : a.toFixed(2);
+  s = s.replace(/(\.\d*?)0+$/,'$1').replace(/\.$/,'');
+  return s==='' ? '0' : s;
+}
+const lead=v=>(v<0?'-':'')+nf(v);
+const op=v=>(v<0?' - ':' + ')+nf(v);
+
+/* ---------- familles de fonctions : l'échelle des déblocages ---------- */
+const FAM_LADDER = [
+  { id:'line', nom:'droite', spec:{a:[-1.15,1.15]},
+    f:p=>t=>p.a*t,
+    fmt:p=>`${lead(p.a)}x` },
+  { id:'sine', nom:'sinusoïde', spec:{A:[1.5,9], w:[0.14,0.75], ph:[0,6.283]},
+    f:p=>t=>p.A*Math.sin(p.w*t+p.ph),
+    fmt:p=>`${lead(p.A)}·sin(${nf(p.w)}x${p.ph>0.05?op(p.ph):''})` },
+  { id:'linsin', nom:'droite + sinus', spec:{a:[-0.9,0.9], A:[1,7], w:[0.15,0.8]},
+    f:p=>t=>p.a*t + p.A*Math.sin(p.w*t),
+    fmt:p=>`${lead(p.a)}x${p.A<0?' - ':' + '}${nf(p.A)}·sin(${nf(p.w)}x)` },
+  { id:'poly', nom:'parabole', spec:{a:[-0.9,0.9], b:[-0.028,0.028]},
+    f:p=>t=>p.a*t + p.b*t*t,
+    fmt:p=>`${lead(p.a)}x${op(p.b)}x²` },
+  { id:'bump', nom:'gaussienne', spec:{A:[-15,15], m:[6,46], s:[2.5,9]},
+    f:p=>t=>p.A*Math.exp(-(((t-p.m)/p.s)**2)),
+    fmt:p=>`${lead(p.A)}·exp(-((x - ${nf(p.m)})/${nf(p.s)})²)` },
+  { id:'linbump', nom:'droite + gaussienne', spec:{a:[-0.7,0.7], A:[-13,13], m:[6,44], s:[2.5,8]},
+    f:p=>t=>p.a*t + p.A*Math.exp(-(((t-p.m)/p.s)**2)),
+    fmt:p=>`${lead(p.a)}x${p.A<0?' - ':' + '}${nf(Math.abs(p.A))}·exp(-((x - ${nf(p.m)})/${nf(p.s)})²)` },
+  { id:'duosin', nom:'double sinus', spec:{A:[1,6], w:[0.12,0.5], B:[1,5], u:[0.5,1.1]},
+    f:p=>t=>p.A*Math.sin(p.w*t)+p.B*Math.sin(p.u*t),
+    fmt:p=>`${lead(p.A)}·sin(${nf(p.w)}x) + ${nf(p.B)}·sin(${nf(p.u)}x)` },
+  { id:'tanh', nom:'marche tanh', spec:{A:[-11,11], m:[6,44], s:[1.5,6]},
+    f:p=>t=>p.A*Math.tanh((t-p.m)/p.s),
+    fmt:p=>`${lead(p.A)}·tanh((x - ${nf(p.m)})/${nf(p.s)})` },
+];
+function genParams(fam){ const p={}; for(const k in fam.spec){ const [lo,hi]=fam.spec[k]; p[k]=rnd(lo,hi); } return p; }
+function mutParams(fam,p,mag){
+  const q={};
+  for(const k in fam.spec){ const [lo,hi]=fam.spec[k]; q[k]=clamp(p[k]+rnd(-1,1)*mag*(hi-lo), lo, hi); }
+  return q;
+}
+
+/* ---------- joueurs persistants & progression ---------- */
+const XP_LVL=[0,6,14,24,36,50,66,84];          // xp cumulée requise pour les niveaux 1..8
+const MAX_LVL=XP_LVL.length;
+const levelOf=xp=>{ let l=1; for(let i=1;i<XP_LVL.length;i++) if(xp>=XP_LVL[i]) l=i+1; return Math.min(l,MAX_LVL); };
+const DEFAULT_NAMES=['AMIR','PACO','ADA','ALAN','EMMY','KURT','SOFIA','BLAISE','HENRI','KATHERINE'];
+let profiles;
+function loadProfiles(){
+  try{
+    const s=localStorage.getItem('mathroyale_profiles');
+    if(s){ const p=JSON.parse(s); if(Array.isArray(p)&&p.length) return p; }
+  }catch(e){}
+  return DEFAULT_NAMES.map(n=>({name:n, xp:0, wins:0, kills:0}));
+}
+function saveProfiles(){ try{ localStorage.setItem('mathroyale_profiles', JSON.stringify(profiles)); }catch(e){} }
+profiles=loadProfiles();
+
+/* ---------- état du jeu ---------- */
+const TEAMS=[
+  {name:'NEWTON',  sym:'N', color:'#4de3c0', dir: 1, units:[], card:'card1', hpEl:'hp1', numEl:'hpn1'},
+  {name:'LEIBNIZ', sym:'L', color:'#ffb454', dir:-1, units:[], card:'card2', hpEl:'hp2', numEl:'hpn2'},
+];
+const living=team=>team.units.filter(u=>u.alive);
+const uLabel=u=>u.pname || (u.team.sym+String(u.idx+1).padStart(2,'0'));
+
+let obstacles=[], holes=[];
+let shots=[], doneShots=[], particles=[], aiQueue=[];
+let shake=0, gameT=0, paused=false, speed=1;
+let gen=0, matchNo=0, phase='lobby', clock=MATCH_TIME, sudden=false;
+let participants=[];                 // [{prof, unit, xp0}]
+const series=[0,0];
+let lastFormulaAt=-9999;
+
+/* ---------- horloge de jeu + files d'attente ---------- */
+const waiters=[], condWaiters=[];
+function wait(ms){ return new Promise(res=>waiters.push({t:gameT+ms,res})); }
+function waitFor(fn){ return new Promise(res=>condWaiters.push({fn,res})); }
+
+/* ---------- terrain ---------- */
+function isSolid(x,y){
+  let inside=false;
+  for(const o of obstacles){ const dx=x-o.x,dy=y-o.y; if(dx*dx+dy*dy<o.r*o.r){inside=true;break;} }
+  if(!inside) return false;
+  for(const h of holes){ const dx=x-h.x,dy=y-h.y; if(dx*dx+dy*dy<h.r*h.r) return false; }
+  return true;
+}
+function genWorld(botLevel){
+  for(const team of TEAMS){
+    team.units=[];
+    const x0 = team.dir>0 ? -29 : 16.5;
+    for(let i=0;i<TEAM_SIZE;i++){
+      const col=i%5, row=Math.floor(i/5);
+      const x=x0 + col*2.6 + rnd(-.7,.7);
+      const y=-13.6 + row*3.0 + rnd(-.8,.8);
+      team.units.push({
+        team, idx:i, x, y, hx:x, hy:y,
+        dvx:0, dvy:0, retarget:rnd(0,2),
+        alive:true, cool:rnd(3,13), pending:false,
+        level:clamp(botLevel+pick([-1,0,0,0,1]),1,MAX_LVL),
+        memory:[], kills:0, pname:null,
+      });
+    }
+  }
+  obstacles=[]; holes=[];
+  const n=9+rndi(4);
+  for(let k=0;k<n;k++) obstacles.push({x:rnd(-13,13), y:rnd(-12.5,12.5), r:rnd(1.8,3.6), seed:Math.random()*1e4});
+}
+
+/* ---------- IA : calcul d'un tir (contre un instantané du monde) ---------- */
+function computeShot(shooter){
+  const enemies=living(TEAMS[shooter.team===TEAMS[0]?1:0])
+    .map(u=>({x:u.x,y:u.y}))
+    .sort((a,b)=>a.x-b.x);
+  const fams=FAM_LADDER.slice(0, shooter.level);
+  const nC=8+shooter.level*4;
+  const cands=[];
+  const evalCand=(fam,p)=>{
+    const raw=fam.f(p), y0=raw(0), fn=t=>raw(t)-y0;
+    // simulation géométrique + score (fenêtre en x sur les ennemis triés)
+    let minD=Infinity, hitAt=-1, ex=0, ey=0, rock=false;
+    let wi=0;
+    for(let t=0; t<=62; t+=STEP){
+      const x=shooter.x+shooter.team.dir*t, y=shooter.y+fn(t);
+      if(!isFinite(y) || Math.abs(y)>60 || x<-WX-1 || x>WX+1){ ex=x; ey=y; break; }
+      const lo=x-1.1, hi=x+1.1;
+      if(shooter.team.dir>0){ while(wi<enemies.length && enemies[wi].x<lo) wi++; }
+      else { while(wi<enemies.length && enemies[enemies.length-1-wi].x>hi) wi++; }
+      for(let j=0;j<enemies.length;j++){
+        const e=shooter.team.dir>0 ? enemies[j] : enemies[enemies.length-1-j];
+        if(shooter.team.dir>0){ if(e.x>hi) break; if(e.x<lo) continue; }
+        else { if(e.x<lo) break; if(e.x>hi) continue; }
+        const d=Math.hypot(x-e.x,y-e.y);
+        if(d<minD) minD=d;
+        if(t>2 && d<=HIT_R+0.15){ hitAt=t; }
+      }
+      if(hitAt>=0){ ex=x; ey=y; break; }
+      if(t>1 && isSolid(x,y)){ rock=true; ex=x; ey=y; break; }
+    }
+    let score;
+    if(hitAt>=0) score=1000-hitAt;
+    else{
+      score=-minD;
+      if(rock){
+        for(const e of enemies){
+          const d=Math.hypot(ex-e.x,ey-e.y);
+          if(d<KILL_R+1) score+=(KILL_R+1-d)*1.5;
+        }
+      }
+    }
+    score*=1+rnd(-0.12,0.12);                    // score bruité : l'IA se trompe
+    cands.push({fam,p,score});
+  };
+  for(let k=0;k<nC;k++){ const fam=pick(fams); evalCand(fam, genParams(fam)); }
+  for(const mem of shooter.memory){
+    const fam=fams.find(f=>f.id===mem.famId);
+    if(fam) for(let k=0;k<5;k++) evalCand(fam, mutParams(fam,mem.p,0.15));
+  }
+  cands.sort((a,b)=>b.score-a.score);
+  shooter.memory=cands.slice(0,2).map(c=>({famId:c.fam.id,p:c.p}));
+  const best=cands[0];
+  const tremor=Math.max(0.045, 0.11-0.009*shooter.level);  // tremblement permanent
+  const p=mutParams(best.fam,best.p,tremor);
+  const raw=best.fam.f(p), y0=raw(0), fn=t=>raw(t)-y0;
+  const label=best.fam.fmt(p) + (Math.abs(y0)>0.05?op(-y0):'');
+  // tracé géométrique complet (les collisions seront résolues EN VOL)
+  const pts=[];
+  for(let t=0;t<=62;t+=STEP){
+    const x=shooter.x+shooter.team.dir*t, y=shooter.y+fn(t);
+    if(!isFinite(y)||Math.abs(y)>60||x<-WX-1.5||x>WX+1.5) break;
+    pts.push(x,y);
+  }
+  return {pts, label};
+}
+
+/* ============================================================
+   RENDU
+   ============================================================ */
+const cv=el('cv'), ctx=cv.getContext('2d');
+const obLayer=document.createElement('canvas'), obCtx=obLayer.getContext('2d');
+let vw=0, vh=0, S=1, CX=0, CY=0, dpr=1;
+const wx=x=>CX+x*S, wy=y=>CY-y*S;
+
+const stars=Array.from({length:140},()=>({x:Math.random(),y:Math.random(),r:rnd(.4,1.5),f:rnd(.5,2.5),ph:rnd(0,TAU)}));
+
+function resize(){
+  const st=el('stage');
+  vw=st.clientWidth; vh=st.clientHeight;
+  dpr=Math.min(window.devicePixelRatio||1, 2);
+  cv.width=vw*dpr; cv.height=vh*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  obLayer.width=vw*dpr; obLayer.height=vh*dpr;
+  obCtx.setTransform(dpr,0,0,dpr,0,0);
+  S=Math.min(vw/(WX*2+3), vh/(WY*2+3));
+  CX=vw/2; CY=vh/2;
+  drawObstacleLayer();
+}
+new ResizeObserver(resize).observe(el('stage'));
+
+function drawObstacleLayer(){
+  if(!vw || !vh) return;               // scène pas encore dimensionnée
+  obCtx.clearRect(0,0,vw,vh);
+  for(const o of obstacles){
+    const x=wx(o.x), y=wy(o.y), r=o.r*S;
+    const g=obCtx.createRadialGradient(x-r*.3,y-r*.35,r*.1, x,y,r);
+    g.addColorStop(0,'#39466b'); g.addColorStop(.75,'#242f4e'); g.addColorStop(1,'#1a2340');
+    obCtx.fillStyle=g;
+    obCtx.beginPath(); obCtx.arc(x,y,r,0,TAU); obCtx.fill();
+    obCtx.strokeStyle='rgba(140,165,220,.28)'; obCtx.lineWidth=1;
+    obCtx.beginPath(); obCtx.arc(x,y,r-0.6,0,TAU); obCtx.stroke();
+    let s=o.seed;
+    const prand=()=>{ s=(s*9301+49297)%233280; return s/233280; };
+    obCtx.fillStyle='rgba(10,16,32,.5)';
+    for(let k=0;k<5;k++){
+      const a=prand()*TAU, rr=prand()*o.r*.55, cr=(0.2+prand()*0.4)*S;
+      obCtx.beginPath(); obCtx.arc(x+Math.cos(a)*rr*S, y+Math.sin(a)*rr*S, cr, 0, TAU); obCtx.fill();
+    }
+  }
+  obCtx.globalCompositeOperation='destination-out';
+  for(const h of holes){
+    const x=wx(h.x), y=wy(h.y), r=h.r*S*1.12;
+    const g=obCtx.createRadialGradient(x,y,0, x,y,r);
+    g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(.82,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    obCtx.fillStyle=g;
+    obCtx.beginPath(); obCtx.arc(x,y,r,0,TAU); obCtx.fill();
+  }
+  obCtx.globalCompositeOperation='source-over';
+}
+
+function drawGrid(){
+  ctx.lineWidth=1;
+  for(let x=-WX;x<=WX;x+=2){
+    ctx.strokeStyle = x===0 ? 'rgba(140,170,230,.22)' : (x%10===0 ? 'rgba(120,155,225,.11)' : 'rgba(110,150,220,.05)');
+    ctx.beginPath(); ctx.moveTo(wx(x),wy(-WY)); ctx.lineTo(wx(x),wy(WY)); ctx.stroke();
+  }
+  for(let y=-WY;y<=WY;y+=2){
+    ctx.strokeStyle = y===0 ? 'rgba(140,170,230,.22)' : (y%10===0 ? 'rgba(120,155,225,.11)' : 'rgba(110,150,220,.05)');
+    ctx.beginPath(); ctx.moveTo(wx(-WX),wy(y)); ctx.lineTo(wx(WX),wy(y)); ctx.stroke();
+  }
+  ctx.fillStyle='rgba(126,141,176,.5)'; ctx.font='10px '+getComputedStyle(document.body).getPropertyValue('--mono');
+  ctx.textAlign='center';
+  for(const x of [-20,-10,10,20]) ctx.fillText(x, wx(x)+1, wy(0)+13);
+  for(const y of [-10,10]) ctx.fillText(y, wx(0)+11, wy(y)+3);
+}
+
+function drawPathN(pts, n, color, width, alpha){
+  if(n<2) return;
+  ctx.globalAlpha=alpha; ctx.strokeStyle=color; ctx.lineWidth=width;
+  ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.beginPath();
+  ctx.moveTo(wx(pts[0]),wy(pts[1]));
+  for(let k=1;k<n;k++) ctx.lineTo(wx(pts[k*2]),wy(pts[k*2+1]));
+  ctx.stroke();
+  ctx.globalAlpha=1;
+}
+
+function drawUnit(u){
+  if(!u.alive) return;
+  const x=wx(u.x), y=wy(u.y);
+  const star=!!u.pname;
+  const r=S*(star?0.68:0.55);
+  ctx.fillStyle=u.team.color;
+  ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill();
+  if(star){
+    ctx.strokeStyle='#ffffff'; ctx.globalAlpha=.85; ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.arc(x,y,r+1.6,0,TAU); ctx.stroke();
+    ctx.globalAlpha=1;
+    const mono=getComputedStyle(document.body).getPropertyValue('--mono');
+    ctx.font='700 10px '+mono;
+    ctx.textAlign='center';
+    ctx.fillStyle='rgba(6,10,20,.85)';
+    const w=ctx.measureText('★ '+u.pname).width;
+    ctx.fillRect(x-w/2-3, y-r-16, w+6, 12);
+    ctx.fillStyle=u.team.color;
+    ctx.fillText('★ '+u.pname, x, y-r-6.5);
+  }
+}
+
+function render(){
+  ctx.clearRect(0,0,vw,vh);
+  ctx.save();
+  if(shake>0 && !REDUCED) ctx.translate(rnd(-shake,shake), rnd(-shake,shake));
+  for(const st of stars){
+    const a=.22+.28*Math.sin(gameT/1000*st.f+st.ph);
+    ctx.fillStyle=`rgba(190,210,255,${Math.max(0,a)})`;
+    ctx.fillRect(st.x*vw, st.y*vh, st.r, st.r);
+  }
+  drawGrid();
+  if(obLayer.width && obLayer.height) ctx.drawImage(obLayer,0,0,vw,vh);
+  // traces récentes qui s'estompent
+  for(const d of doneShots){
+    const a=Math.max(0, .3*(1-d.age/2.2));
+    if(a>0.01) drawPathN(d.pts, d.n, d.color, 1, a);
+  }
+  // tirs en vol
+  for(const s of shots){
+    const n=Math.max(2,Math.floor(s.idx));
+    drawPathN(s.pts, Math.min(n,s.n), s.color, 3.4, .10);
+    drawPathN(s.pts, Math.min(n,s.n), s.color, 1.7, .9);
+    const hi=Math.min(s.n-1, n-1);
+    const hx=wx(s.pts[hi*2]), hy=wy(s.pts[hi*2+1]);
+    const g=ctx.createRadialGradient(hx,hy,0,hx,hy,9);
+    g.addColorStop(0,'#ffffff'); g.addColorStop(.35,s.color); g.addColorStop(1,'transparent');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(hx,hy,9,0,TAU); ctx.fill();
+  }
+  for(const team of TEAMS) for(const u of team.units) drawUnit(u);
+  // particules
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  for(const p of particles){
+    ctx.globalAlpha=Math.max(0,p.life/p.max);
+    ctx.fillStyle=p.color;
+    ctx.beginPath(); ctx.arc(wx(p.x),wy(p.y),p.r,0,TAU); ctx.fill();
+  }
+  ctx.restore();
+  ctx.restore();
+  const vg=ctx.createRadialGradient(vw/2,vh/2,Math.min(vw,vh)*.42, vw/2,vh/2,Math.max(vw,vh)*.72);
+  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(2,5,12,.42)');
+  ctx.fillStyle=vg; ctx.fillRect(0,0,vw,vh);
+}
+
+/* ---------- particules & effets ---------- */
+function spawnParticles(x,y,color,count,power){
+  if(REDUCED) count=Math.floor(count/3);
+  count=Math.min(count, 620-particles.length);
+  for(let k=0;k<count;k++){
+    const a=rnd(0,TAU), v=rnd(2,power);
+    particles.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,grav:-14,
+      life:rnd(.3,.8), max:.8, r:rnd(.8,2.4), color:pick([color,'#ffffff','#ffd166'])});
+  }
+}
+function explosion(x,y,color,big){
+  spawnParticles(x,y,color, big?46:22, big?15:10);
+  shake=Math.max(shake, big?6:3);
+}
+
+/* ---------- kill feed & HUD ---------- */
+function feed(html){
+  const box=el('feed');
+  const div=document.createElement('div');
+  div.className='feedline'; div.innerHTML=html;
+  box.appendChild(div);
+  while(box.children.length>5) box.firstChild.remove();
+  setTimeout(()=>{ if(div.parentNode) div.remove(); }, 6000);
+}
+function colored(u){ return `<b style="color:${u.team.color}">${uLabel(u)}</b>`; }
+function say(t){
+  const c=el('comment');
+  c.textContent=t;
+  c.style.animation='none'; void c.offsetWidth; c.style.animation='';
+}
+function banner(text,color){
+  const b=el('banner');
+  b.textContent=text; b.style.color=color;
+  b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
+}
+function updateHUD(){
+  for(let i=0;i<2;i++){
+    const team=TEAMS[i], n=living(team).length;
+    el(team.hpEl).style.transform=`scaleX(${n/TEAM_SIZE})`;
+    el(team.numEl).textContent=n;
+  }
+  const m=Math.floor(Math.max(0,clock)/60), s=Math.floor(Math.max(0,clock)%60);
+  el('series').textContent=`⏱ ${m}:${String(s).padStart(2,'0')}${sudden?' · MORT SUBITE':''} · manche ${matchNo} · victoires ${series[0]}–${series[1]}`;
+}
+function hurtCard(team){
+  const c=el(team.card);
+  c.classList.remove('hurt'); void c.offsetWidth; c.classList.add('hurt');
+}
+function showFormula(u,label){
+  el('fwho').textContent=`${uLabel(u)} ▸ f(x) =`;
+  el('fwho').style.color=u.team.color;
+  const t=el('ftext'); t.style.color=u.team.color; t.textContent=label;
+  lastFormulaAt=gameT;
+}
+
+/* ---------- morts & résolution en vol ---------- */
+function killUnit(u, killer){
+  if(!u.alive) return;
+  u.alive=false;
+  explosion(u.x,u.y,u.team.color,!!u.pname);
+  hurtCard(u.team);
+  if(killer){ killer.kills++; feed(`${colored(killer)} ☠ ${colored(u)}`); }
+  else feed(`💥 ${colored(u)} soufflé`);
+  if(u.pname) say(`☠ ${u.pname} est éliminé !`);
+  else if(killer && killer.pname) say(`🎯 ${killer.pname} aligne ${uLabel(u)} !`);
+  updateHUD();
+}
+function resolveShotStep(s, fromIdx, toIdx){
+  const enemyTeam = s.team===TEAMS[0] ? TEAMS[1] : TEAMS[0];
+  for(let k=fromIdx;k<=toIdx && k<s.n;k++){
+    const x=s.pts[k*2], y=s.pts[k*2+1];
+    if(k>25 && isSolid(x,y)){                       // ~2 unités après le canon
+      holes.push({x,y,r:2.0});
+      drawObstacleLayer();
+      explosion(x,y,'#ffb08a',false);
+      sfx.rock();
+      let vict=0;
+      for(const t2 of TEAMS) for(const u of living(t2)){
+        if(Math.hypot(x-u.x,y-u.y)<KILL_R){ killUnit(u, u.team!==s.team?s.shooter:null); vict++; }
+      }
+      if(vict>1) say(`💥 Souffle multiple : ${vict} boules d'un coup !`);
+      return true;
+    }
+    for(const u of enemyTeam.units){
+      if(!u.alive) continue;
+      if(Math.hypot(x-u.x,y-u.y)<=HIT_R){
+        killUnit(u, s.shooter);
+        explosion(x,y,u.team.color,false);
+        sfx.hit();
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/* ---------- boucle temps réel ---------- */
+let lastT=performance.now();
+function frame(now){
+  const dt=Math.min(0.05,(now-lastT)/1000); lastT=now;
+  const gdt=paused?0:dt*speed;
+  gameT+=gdt*1000;
+
+  if(phase==='live' && gdt>0){
+    clock-=gdt;
+    if(!sudden && clock<=SUDDEN_AT){ sudden=true; banner('MORT SUBITE','#ff6b6b'); say('⚡ Mort subite : cadence de tir doublée !'); }
+    if(clock<=0 || living(TEAMS[0]).length===0 || living(TEAMS[1]).length===0) phase='over';
+    updateHUDClock();
+
+    // dérive des boules (cibles mobiles)
+    for(const team of TEAMS) for(const u of team.units){
+      if(!u.alive) continue;
+      u.retarget-=gdt;
+      if(u.retarget<=0){ const a=rnd(0,TAU); const v=0.45; u.dvx=Math.cos(a)*v; u.dvy=Math.sin(a)*v; u.retarget=rnd(1.5,3.5); }
+      u.x=clamp(u.x+u.dvx*gdt, u.hx-1.7, u.hx+1.7);
+      u.y=clamp(u.y+u.dvy*gdt, Math.max(-15,u.hy-1.7), Math.min(15,u.hy+1.7));
+      // recharge et mise en file du tir
+      u.cool-=gdt;
+      if(u.cool<=0 && !u.pending && shots.length<MAX_SHOTS){
+        u.pending=true; aiQueue.push(u);
+      }
+    }
+    // budget : 2 calculs d'IA par frame maxi
+    for(let k=0;k<2 && aiQueue.length;k++){
+      const u=aiQueue.shift();
+      if(!u.alive || phase!=='live'){ u.pending=false; continue; }
+      const {pts,label}=computeShot(u);
+      u.pending=false;
+      u.cool=sudden?rnd(3.5,6):rnd(8,14);
+      if(pts.length<8) continue;
+      shots.push({pts, n:pts.length/2, idx:4, color:u.team.color, team:u.team, shooter:u});
+      spawnParticles(u.x,u.y,u.team.color,5,6);
+      sfx.fire(!!u.pname);
+      if(u.pname || gameT-lastFormulaAt>4000) showFormula(u,label);
+    }
+  }
+
+  // vol des tirs (collisions contre le monde vivant)
+  for(let i=shots.length-1;i>=0;i--){
+    const s=shots[i];
+    const prev=Math.floor(s.idx);
+    s.idx+=(SHOT_SPEED/STEP)*gdt;
+    const cur=Math.floor(Math.min(s.idx, s.n-1));
+    let dead=false;
+    if(gdt>0 && phase==='live') dead=resolveShotStep(s, prev+1, cur);
+    if(dead || s.idx>=s.n){
+      doneShots.push({pts:s.pts, n:Math.min(cur+1,s.n), color:s.color, age:0});
+      if(doneShots.length>14) doneShots.shift();
+      shots.splice(i,1);
+    }
+  }
+  for(const d of doneShots) d.age+=gdt;
+
+  for(const p of particles){ p.vy+=p.grav*gdt; p.x+=p.vx*gdt; p.y+=p.vy*gdt; p.life-=gdt; }
+  particles=particles.filter(p=>p.life>0);
+  shake=Math.max(0,shake-22*dt);
+
+  for(let k=waiters.length-1;k>=0;k--) if(gameT>=waiters[k].t){ waiters[k].res(); waiters.splice(k,1); }
+  for(let k=condWaiters.length-1;k>=0;k--) if(condWaiters[k].fn()){ condWaiters[k].res(); condWaiters.splice(k,1); }
+  render();
+  requestAnimationFrame(frame);
+}
+let hudTick=0;
+function updateHUDClock(){ if(gameT-hudTick>250){ hudTick=gameT; updateHUD(); } }
+
+/* ---------- sons (synthèse WebAudio, coupé par défaut) ---------- */
+let AC=null, sndOn=false, noiseBuf=null;
+function ac(){
+  if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)();
+  if(AC.state==='suspended') AC.resume();
+  if(!noiseBuf){
+    noiseBuf=AC.createBuffer(1, AC.sampleRate*0.6, AC.sampleRate);
+    const d=noiseBuf.getChannelData(0);
+    for(let k=0;k<d.length;k++) d[k]=Math.random()*2-1;
+  }
+  return AC;
+}
+function tone(f0,f1,dur,type,vol){
+  if(!sndOn) return;
+  const c=ac(), o=c.createOscillator(), g=c.createGain();
+  o.type=type; o.frequency.setValueAtTime(f0,c.currentTime);
+  if(f1) o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),c.currentTime+dur);
+  g.gain.setValueAtTime(vol,c.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+dur);
+  o.connect(g).connect(c.destination);
+  o.start(); o.stop(c.currentTime+dur+.03);
+}
+function noiseHit(dur,vol,fc){
+  if(!sndOn) return;
+  const c=ac(), src=c.createBufferSource(), g=c.createGain(), f=c.createBiquadFilter();
+  src.buffer=noiseBuf; f.type='lowpass'; f.frequency.setValueAtTime(fc,c.currentTime);
+  f.frequency.exponentialRampToValueAtTime(90,c.currentTime+dur);
+  g.gain.setValueAtTime(vol,c.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+dur);
+  src.connect(f).connect(g).connect(c.destination);
+  src.start(); src.stop(c.currentTime+dur);
+}
+const sfx={
+  fire(star){ if(star) tone(620,140,0.22,'sawtooth',0.05); },
+  rock(){ noiseHit(0.22,0.10,600); },
+  hit(){ noiseHit(0.3,0.14,1000); tone(300,70,0.3,'square',0.05); },
+  win(){ [523,659,784,1047].forEach((f,k)=>setTimeout(()=>tone(f,0,0.16,'square',0.08), k*130)); },
+};
+
+/* ---------- déroulement d'un match ---------- */
+function overlayShow(html){ el('ovpanel').innerHTML=html; el('overlay').classList.remove('hidden'); }
+function overlayHide(){ el('overlay').classList.add('hidden'); }
+
+async function runMatch(g){
+  phase='lobby';
+  // matchmaking : ≥ 2 joueurs, complétés par des bots au niveau moyen
+  const pool=[...profiles].sort(()=>Math.random()-0.5);
+  const nPlayers=2+rndi(2);
+  const chosen=pool.slice(0,nPlayers);
+  const avgLvl=Math.round(chosen.reduce((a,p)=>a+levelOf(p.xp),0)/chosen.length);
+  genWorld(clamp(avgLvl,1,MAX_LVL));
+  participants=[];
+  const free=TEAMS.flatMap(t=>t.units);
+  for(const prof of chosen){
+    const u=free.splice(rndi(free.length),1)[0];
+    u.pname=prof.name; u.level=levelOf(prof.xp);
+    participants.push({prof, unit:u, xp0:prof.xp});
+  }
+  shots=[]; doneShots=[]; particles=[]; aiQueue=[]; holes=[];
+  clock=MATCH_TIME; sudden=false;
+  drawObstacleLayer(); updateHUD();
+  el('feed').innerHTML='';
+  el('fwho').textContent='—'; el('fwho').style.color='';
+  el('ftext').textContent='matchmaking…'; el('ftext').style.color='';
+
+  const nivMoyen=clamp(avgLvl,1,MAX_LVL);
+  overlayShow(`
+    <h2>Matchmaking</h2>
+    <div class="sub">manche ${matchNo} · ${TEAM_SIZE*2} combattants</div>
+    <ul>
+      ${chosen.map(p=>{
+        const lv=levelOf(p.xp);
+        const next=lv<MAX_LVL?FAM_LADDER[lv].nom:'arsenal complet';
+        return `<li>★ ${p.name} — <span class="lvl">niveau ${lv}</span> · ${p.xp} xp · prochain déblocage : ${next}</li>`;
+      }).join('')}
+    </ul>
+    <div class="note">${chosen.length} joueur(s) connecté(s) · ${TEAM_SIZE*2-chosen.length} bots de niveau ≈ ${nivMoyen} complètent la partie.<br>
+    Niveau = fonctions débloquées : ${FAM_LADDER.slice(0,Math.min(nivMoyen+1,MAX_LVL)).map(f=>f.nom).join(' → ')}…</div>
+  `);
+  say(`Matchmaking : ${chosen.map(p=>p.name).join(', ')} + ${TEAM_SIZE*2-chosen.length} bots (niveau ≈ ${nivMoyen}).`);
+  await wait(4200); if(g!==gen) return;
+  overlayHide();
+  banner('3','#dbe6fa'); await wait(700); if(g!==gen) return;
+  banner('2','#dbe6fa'); await wait(700); if(g!==gen) return;
+  banner('1','#dbe6fa'); await wait(700); if(g!==gen) return;
+  banner('GO','#ffd166');
+  say('⚔ La bataille commence — les courbes fusent en temps réel !');
+  phase='live';
+
+  await waitFor(()=>phase==='over'||g!==gen); if(g!==gen) return;
+
+  // résultats
+  const s0=living(TEAMS[0]).length, s1=living(TEAMS[1]).length;
+  let winner=null;
+  if(s0!==s1) winner=s0>s1?TEAMS[0]:TEAMS[1];
+  if(winner){ series[TEAMS.indexOf(winner)]++; banner(`${winner.name} L'EMPORTE`, winner.color); sfx.win(); }
+  else banner('ÉGALITÉ','#dbe6fa');
+  updateHUD();
+
+  // XP : +2 participation, +1 par frag, +3 victoire d'équipe
+  const report=[];
+  for(const pa of participants){
+    const won=winner && pa.unit.team===winner;
+    const gain=2 + pa.unit.kills + (won?3:0);
+    const lv0=levelOf(pa.prof.xp);
+    pa.prof.xp+=gain;
+    pa.prof.kills+=pa.unit.kills;
+    if(won) pa.prof.wins++;
+    const lv1=levelOf(pa.prof.xp);
+    report.push({name:pa.prof.name, gain, kills:pa.unit.kills, alive:pa.unit.alive, lv0, lv1});
+  }
+  saveProfiles();
+  const topFrag=TEAMS.flatMap(t=>t.units).sort((a,b)=>b.kills-a.kills).slice(0,3);
+  await wait(1600); if(g!==gen) return;
+  overlayShow(`
+    <h2>${winner?`Victoire ${winner.name}`:'Égalité'}</h2>
+    <div class="sub">survivants ${s0} – ${s1} · manche ${matchNo}</div>
+    <ul>
+      ${report.map(r=>`<li>★ ${r.name} — +${r.gain} xp (${r.kills} frag${r.kills>1?'s':''}${r.alive?', survivant':''})
+        ${r.lv1>r.lv0?`<span class="up"> ▲ niveau ${r.lv1} ! débloque : ${FAM_LADDER[r.lv1-1].nom}</span>`:` <span class="lvl">niv ${r.lv1}</span>`}</li>`).join('')}
+    </ul>
+    <div class="note">Meilleurs tireurs : ${topFrag.map(u=>`${uLabel(u)} ×${u.kills}`).join(' · ')}<br>Prochain match dans quelques secondes…</div>
+  `);
+  say(winner?`🏆 ${winner.name} gagne ${s0}–${s1} ! XP distribuée.`:`Égalité ${s0}–${s1}. XP distribuée.`);
+  await wait(6500); if(g!==gen) return;
+  overlayHide();
+  newMatch();
+}
+
+function newMatch(){
+  gen++;
+  matchNo++;
+  phase='lobby';
+  runMatch(gen);
+}
+
+/* ---------- contrôles ---------- */
+addEventListener('error', e=>{ try{ el('comment').textContent='⚠ Erreur interne : '+e.message; }catch(_){} });
+el('bPause').onclick=()=>{
+  paused=!paused;
+  el('bPause').textContent=paused?'▶ Reprendre':'⏸ Pause';
+};
+addEventListener('keydown',e=>{ if(e.code==='Space'){ e.preventDefault(); el('bPause').click(); } });
+el('bSpeed').onclick=()=>{
+  speed = speed===1?2 : speed===2?4 : 1;
+  el('bSpeed').textContent=`Vitesse ×${speed}`;
+};
+el('bSound').onclick=()=>{
+  sndOn=!sndOn;
+  if(sndOn) ac();
+  el('bSound').textContent=sndOn?'🔊 Son':'🔇 Son';
+};
+el('bNew').onclick=()=>newMatch();
+
+/* ---------- démarrage ---------- */
+resize();
+newMatch();
+requestAnimationFrame(frame);
+</script>
