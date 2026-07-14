@@ -1,4 +1,9 @@
+<!doctype html>
+<html lang="fr">
+<head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Battle royale 50 vs 50 en temps réel : des IA s'affrontent à coups de fonctions mathématiques, avec progression et déblocages.">
 <title>Math Royale — Duel de Fonctions</title>
 <style>
   :root{
@@ -15,7 +20,8 @@
   }
   /* min-height explicite : dans l'iframe auto-dimensionnée des artifacts,
      100dvh seul est circulaire (contenu = taille iframe = contenu) et tout s'écrase. */
-  #app{height:100dvh; min-height:660px; display:flex; flex-direction:column; gap:8px; padding:10px; box-sizing:border-box;}
+  #app{height:100vh; height:100dvh; min-height:660px; display:flex; flex-direction:column; gap:8px; padding:10px;
+       padding-bottom:max(10px, env(safe-area-inset-bottom)); box-sizing:border-box;}
 
   /* ---- top bar : équipes + titre ---- */
   #topbar{display:flex; align-items:stretch; gap:8px;}
@@ -114,14 +120,30 @@
   button:hover{border-color:#31446e; background:#16223c;}
   button:focus-visible{outline:2px solid var(--gold); outline-offset:2px;}
 
+  /* ---- mobile (portrait) : l'arène pivote de 90° côté JS, le chrome se compacte ---- */
   @media (max-width:680px){
-    #center{display:none;}
-    .dname{font-size:13px;}
-    #ftext{font-size:14px;}
-    button{padding:8px 9px;}
-    #feed{font-size:10px;}
+    #app{gap:6px; padding:8px; padding-bottom:max(8px, env(safe-area-inset-bottom)); min-height:600px;}
+    #topbar{flex-wrap:wrap; gap:6px;}
+    .duelist{flex:1 1 42%; padding:7px 10px; gap:4px;}
+    .dtag{display:none;}
+    .dname{font-size:12.5px;}
+    .hpnum{font-size:13px;}
+    #center{order:3; flex:1 1 100%; padding:4px 8px;}
+    #title,#sub{display:none;}
+    #readout{gap:6px;}
+    #formula{flex:1 1 100%; padding:7px 10px;}
+    #ftext{font-size:13px;}
+    #comment{flex:1 1 100%; padding:7px 10px; font-size:11.5px;}
+    #controls{flex:1 1 100%; justify-content:center;}
+    button{padding:7px 9px; font-size:11px;}
+    #feed{font-size:10px; max-width:72vw;}
+    #banner{font-size:clamp(18px,7vw,40px);}
+    #overlay .panel{padding:14px 16px;}
+    #overlay li{font-size:11.5px;}
   }
 </style>
+</head>
+<body>
 
 <div id="app">
   <div id="topbar">
@@ -374,8 +396,12 @@ function computeShot(shooter){
    ============================================================ */
 const cv=el('cv'), ctx=cv.getContext('2d');
 const obLayer=document.createElement('canvas'), obCtx=obLayer.getContext('2d');
-let vw=0, vh=0, S=1, CX=0, CY=0, dpr=1;
-const wx=x=>CX+x*S, wy=y=>CY-y*S;
+let vw=0, vh=0, S=1, CX=0, CY=0, dpr=1, PORTRAIT=false;
+/* En portrait (téléphone), le monde pivote de 90° : Newton en haut,
+   Leibniz en bas, les courbes volent verticalement. Tout le rendu
+   passe par sx/sy, la logique de jeu reste en coordonnées monde. */
+const sx=(x,y)=>PORTRAIT ? CX+y*S : CX+x*S;
+const sy=(x,y)=>PORTRAIT ? CY+x*S : CY-y*S;
 
 const stars=Array.from({length:140},()=>({x:Math.random(),y:Math.random(),r:rnd(.4,1.5),f:rnd(.5,2.5),ph:rnd(0,TAU)}));
 
@@ -387,7 +413,9 @@ function resize(){
   ctx.setTransform(dpr,0,0,dpr,0,0);
   obLayer.width=vw*dpr; obLayer.height=vh*dpr;
   obCtx.setTransform(dpr,0,0,dpr,0,0);
-  S=Math.min(vw/(WX*2+3), vh/(WY*2+3));
+  PORTRAIT = vh>vw;
+  S = PORTRAIT ? Math.min(vw/(WY*2+3), vh/(WX*2+3))
+               : Math.min(vw/(WX*2+3), vh/(WY*2+3));
   CX=vw/2; CY=vh/2;
   drawObstacleLayer();
 }
@@ -397,7 +425,7 @@ function drawObstacleLayer(){
   if(!vw || !vh) return;               // scène pas encore dimensionnée
   obCtx.clearRect(0,0,vw,vh);
   for(const o of obstacles){
-    const x=wx(o.x), y=wy(o.y), r=o.r*S;
+    const x=sx(o.x,o.y), y=sy(o.x,o.y), r=o.r*S;
     const g=obCtx.createRadialGradient(x-r*.3,y-r*.35,r*.1, x,y,r);
     g.addColorStop(0,'#39466b'); g.addColorStop(.75,'#242f4e'); g.addColorStop(1,'#1a2340');
     obCtx.fillStyle=g;
@@ -414,7 +442,7 @@ function drawObstacleLayer(){
   }
   obCtx.globalCompositeOperation='destination-out';
   for(const h of holes){
-    const x=wx(h.x), y=wy(h.y), r=h.r*S*1.12;
+    const x=sx(h.x,h.y), y=sy(h.x,h.y), r=h.r*S*1.12;
     const g=obCtx.createRadialGradient(x,y,0, x,y,r);
     g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(.82,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)');
     obCtx.fillStyle=g;
@@ -427,16 +455,16 @@ function drawGrid(){
   ctx.lineWidth=1;
   for(let x=-WX;x<=WX;x+=2){
     ctx.strokeStyle = x===0 ? 'rgba(140,170,230,.22)' : (x%10===0 ? 'rgba(120,155,225,.11)' : 'rgba(110,150,220,.05)');
-    ctx.beginPath(); ctx.moveTo(wx(x),wy(-WY)); ctx.lineTo(wx(x),wy(WY)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx(x,-WY),sy(x,-WY)); ctx.lineTo(sx(x,WY),sy(x,WY)); ctx.stroke();
   }
   for(let y=-WY;y<=WY;y+=2){
     ctx.strokeStyle = y===0 ? 'rgba(140,170,230,.22)' : (y%10===0 ? 'rgba(120,155,225,.11)' : 'rgba(110,150,220,.05)');
-    ctx.beginPath(); ctx.moveTo(wx(-WX),wy(y)); ctx.lineTo(wx(WX),wy(y)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx(-WX,y),sy(-WX,y)); ctx.lineTo(sx(WX,y),sy(WX,y)); ctx.stroke();
   }
   ctx.fillStyle='rgba(126,141,176,.5)'; ctx.font='10px '+getComputedStyle(document.body).getPropertyValue('--mono');
   ctx.textAlign='center';
-  for(const x of [-20,-10,10,20]) ctx.fillText(x, wx(x)+1, wy(0)+13);
-  for(const y of [-10,10]) ctx.fillText(y, wx(0)+11, wy(y)+3);
+  for(const x of [-20,-10,10,20]) ctx.fillText(x, sx(x,0)+1, sy(x,0)+13);
+  for(const y of [-10,10]) ctx.fillText(y, sx(0,y)+11, sy(0,y)+3);
 }
 
 function drawPathN(pts, n, color, width, alpha){
@@ -444,15 +472,15 @@ function drawPathN(pts, n, color, width, alpha){
   ctx.globalAlpha=alpha; ctx.strokeStyle=color; ctx.lineWidth=width;
   ctx.lineJoin='round'; ctx.lineCap='round';
   ctx.beginPath();
-  ctx.moveTo(wx(pts[0]),wy(pts[1]));
-  for(let k=1;k<n;k++) ctx.lineTo(wx(pts[k*2]),wy(pts[k*2+1]));
+  ctx.moveTo(sx(pts[0],pts[1]),sy(pts[0],pts[1]));
+  for(let k=1;k<n;k++){ const px=pts[k*2], py=pts[k*2+1]; ctx.lineTo(sx(px,py),sy(px,py)); }
   ctx.stroke();
   ctx.globalAlpha=1;
 }
 
 function drawUnit(u){
   if(!u.alive) return;
-  const x=wx(u.x), y=wy(u.y);
+  const x=sx(u.x,u.y), y=sy(u.x,u.y);
   const star=!!u.pname;
   const r=S*(star?0.68:0.55);
   ctx.fillStyle=u.team.color;
@@ -494,7 +522,8 @@ function render(){
     drawPathN(s.pts, Math.min(n,s.n), s.color, 3.4, .10);
     drawPathN(s.pts, Math.min(n,s.n), s.color, 1.7, .9);
     const hi=Math.min(s.n-1, n-1);
-    const hx=wx(s.pts[hi*2]), hy=wy(s.pts[hi*2+1]);
+    const hpx=s.pts[hi*2], hpy=s.pts[hi*2+1];
+    const hx=sx(hpx,hpy), hy=sy(hpx,hpy);
     const g=ctx.createRadialGradient(hx,hy,0,hx,hy,9);
     g.addColorStop(0,'#ffffff'); g.addColorStop(.35,s.color); g.addColorStop(1,'transparent');
     ctx.fillStyle=g; ctx.beginPath(); ctx.arc(hx,hy,9,0,TAU); ctx.fill();
@@ -505,7 +534,7 @@ function render(){
   for(const p of particles){
     ctx.globalAlpha=Math.max(0,p.life/p.max);
     ctx.fillStyle=p.color;
-    ctx.beginPath(); ctx.arc(wx(p.x),wy(p.y),p.r,0,TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx(p.x,p.y),sy(p.x,p.y),p.r,0,TAU); ctx.fill();
   }
   ctx.restore();
   ctx.restore();
@@ -838,3 +867,5 @@ resize();
 newMatch();
 requestAnimationFrame(frame);
 </script>
+</body>
+</html>
